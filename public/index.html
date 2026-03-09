@@ -1,0 +1,1768 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Task Refiner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0c; --surface: #111116; --surface2: #18181f; --border: #222230;
+    --accent: #7b61ff; --accent-dim: rgba(123,97,255,0.12);
+    --green: #3dffa0; --green-dim: rgba(61,255,160,0.1);
+    --yellow: #ffd166; --yellow-dim: rgba(255,209,102,0.1);
+    --red: #ff5757; --red-dim: rgba(255,87,87,0.1);
+    --blue: #57b8ff; --blue-dim: rgba(87,184,255,0.08);
+    --orange: #ff9f43; --orange-dim: rgba(255,159,67,0.1);
+    --text: #e2e2f0; --text-muted: #5a5a7a; --text-mid: #9898b8; --radius: 6px;
+  }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', monospace; overflow: hidden; }
+
+  .app { display: grid; grid-template-columns: 1fr; grid-template-rows: 56px 1fr; height: 100vh; }
+  header {
+    grid-column: 1 / -1; display: flex; align-items: center; gap: 16px;
+    padding: 0 24px; border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 18px; letter-spacing: -0.5px; }
+  .logo span { color: var(--accent); }
+  .tab-bar { display: flex; gap: 0; margin-left: 32px; height: 100%; }
+  .tab-btn {
+    background: none; border: none; color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500;
+    letter-spacing: 0.5px; padding: 0 18px; cursor: pointer;
+    border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s;
+  }
+  .tab-btn:hover { color: var(--text-mid); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .stats-bar { display: flex; gap: 20px; margin-left: auto; font-size: 11px; color: var(--text-muted); }
+  .stat { display: flex; gap: 6px; align-items: center; }
+  .stat-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  .view { display: none; grid-column: 1 / -1; overflow: hidden; }
+  .view.active { display: grid; }
+  .view-refine { grid-template-columns: 380px 1fr; }
+  .view-saved  { grid-template-columns: 420px 1fr; }
+  .view-agents { grid-template-columns: 350px 1fr; }
+
+  /* ── Common panel styles ── */
+  .panel-left, .saved-panel-left, .agents-panel-left {
+    border-right: 1px solid var(--border); background: var(--surface);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .panel-right { overflow-y: auto; padding: 28px 32px; display: flex; flex-direction: column; gap: 24px; }
+  .panel-right::-webkit-scrollbar { width: 4px; }
+  .panel-right::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .panel-title {
+    padding: 16px 20px 12px; font-size: 10px; font-weight: 500; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .queue-badge {
+    background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(123,97,255,0.3);
+    border-radius: 20px; padding: 2px 8px; font-size: 10px; font-weight: 700;
+  }
+
+  .input-area { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  textarea {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12.5px;
+    line-height: 1.7; padding: 12px; resize: none; height: 110px; outline: none;
+    transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--text-muted); }
+  .hint { font-size: 10px; color: var(--text-muted); padding: 0 2px; }
+
+  /* Agent selector in refine view */
+  .agent-selector { display: flex; gap: 8px; align-items: center; }
+  .agent-selector label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; }
+  .agent-select {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    padding: 7px 10px; outline: none; cursor: pointer;
+  }
+  .agent-select option { background: var(--surface); }
+
+  .btn-add {
+    background: var(--accent); color: #fff; border: none; border-radius: var(--radius);
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500;
+    padding: 10px 16px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    justify-content: center; transition: opacity 0.2s, transform 0.1s;
+  }
+  .btn-add:hover { opacity: 0.85; }
+  .btn-add:active { transform: scale(0.98); }
+
+  /* Lists */
+  .jobs-list, .saved-list, .agents-list {
+    flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .jobs-list::-webkit-scrollbar, .saved-list::-webkit-scrollbar, .agents-list::-webkit-scrollbar { width: 4px; }
+  .jobs-list::-webkit-scrollbar-thumb, .saved-list::-webkit-scrollbar-thumb, .agents-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .job-item, .saved-item, .agent-item {
+    padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--border);
+    cursor: pointer; transition: background 0.15s, border-color 0.15s;
+    display: flex; flex-direction: column; gap: 4px; animation: fadeIn 0.2s ease;
+  }
+  .job-item:hover, .saved-item:hover, .agent-item:hover { background: var(--surface2); }
+  .job-item.active, .saved-item.active, .agent-item.active { border-color: var(--accent); background: var(--accent-dim); }
+  .job-raw { font-size: 11px; color: var(--text-mid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .job-meta, .saved-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+  .status-badge { font-size: 9px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; }
+  .status-waiting   { background: rgba(90,90,122,0.2); color: var(--text-muted); }
+  .status-processing { background: rgba(87,184,255,0.15); color: var(--blue); }
+  .status-review    { background: var(--yellow-dim); color: var(--yellow); }
+  .status-approved  { background: var(--green-dim); color: var(--green); }
+  .status-published { background: rgba(61,255,160,0.2); color: var(--green); }
+  .status-rejected  { background: var(--red-dim); color: var(--red); }
+  .status-error     { background: var(--red-dim); color: var(--red); }
+
+  .job-time { font-size: 9px; color: var(--text-muted); margin-left: auto; }
+
+  .tag { font-size: 10px; padding: 3px 9px; border-radius: 3px; border: 1px solid; font-weight: 500; letter-spacing: 0.5px; }
+  .tag-effort-P  { color: var(--green);  border-color: rgba(61,255,160,0.3);  background: var(--green-dim); }
+  .tag-effort-M  { color: var(--blue);   border-color: rgba(87,184,255,0.3);  background: var(--blue-dim); }
+  .tag-effort-G  { color: var(--yellow); border-color: rgba(255,209,102,0.3); background: var(--yellow-dim); }
+  .tag-effort-GG { color: var(--red);    border-color: rgba(255,87,87,0.3);   background: var(--red-dim); }
+  .tag-label { color: var(--text-muted); border-color: var(--border); background: var(--surface2); }
+  .tag-role  { color: var(--accent);     border-color: rgba(123,97,255,0.3);  background: var(--accent-dim); }
+  .tag-epic  { color: var(--blue);       border-color: rgba(87,184,255,0.3);  background: var(--blue-dim); }
+  .tag-version { color: var(--yellow);   border-color: rgba(255,209,102,0.3); background: var(--yellow-dim); }
+  .tag-agent { color: var(--orange);     border-color: rgba(255,159,67,0.3);  background: var(--orange-dim); }
+
+  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: var(--text-muted); font-size: 12px; text-align: center; }
+  .empty-icon { font-size: 48px; opacity: 0.3; }
+  .empty h3 { font-family: 'Syne', sans-serif; font-size: 18px; color: var(--text-mid); }
+
+  .task-header { display: flex; flex-direction: column; gap: 8px; }
+  .task-title { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 700; line-height: 1.3; }
+  .task-meta-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+  .section { display: flex; flex-direction: column; gap: 10px; }
+  .section-label { font-size: 9px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .desc-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; font-size: 12px; line-height: 1.8; color: var(--text-mid); }
+
+  .subtask-list { display: flex; flex-direction: column; gap: 6px; }
+  .subtask-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; }
+  .subtask-title { font-size: 12px; font-weight: 500; }
+  .subtask-desc { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+
+  .criteria-list { display: flex; flex-direction: column; gap: 8px; }
+  .criteria-item { background: var(--surface); border: 1px solid var(--border); border-left: 2px solid var(--accent); border-radius: var(--radius); padding: 10px 14px; font-size: 11px; line-height: 1.7; color: var(--text-mid); }
+  .criteria-kw { color: var(--accent); font-weight: 600; }
+
+  .list-items { display: flex; flex-direction: column; gap: 4px; }
+  .list-item { font-size: 11px; color: var(--text-mid); padding: 6px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); display: flex; align-items: center; gap: 8px; }
+  .list-item::before { content: '→'; color: var(--text-muted); font-size: 10px; }
+
+  .raw-task-box {
+    background: var(--surface2); border: 1px solid var(--border); border-left: 2px solid var(--text-muted);
+    border-radius: var(--radius); padding: 12px 14px; font-size: 11px; line-height: 1.7;
+    color: var(--text-muted); white-space: pre-wrap; word-break: break-word; font-style: italic;
+  }
+
+  .action-bar { display: flex; gap: 10px; padding: 16px 0 0; border-top: 1px solid var(--border); position: sticky; bottom: 0; background: var(--bg); }
+  .btn { border-radius: var(--radius); font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; padding: 10px 20px; cursor: pointer; border: 1px solid; transition: opacity 0.2s, transform 0.1s; display: flex; align-items: center; gap: 8px; }
+  .btn:active { transform: scale(0.97); }
+  .btn:hover { opacity: 0.8; }
+  .btn-approve { background: var(--green-dim); color: var(--green); border-color: rgba(61,255,160,0.3); }
+  .btn-reject  { background: var(--red-dim);   color: var(--red);   border-color: rgba(255,87,87,0.3); }
+  .btn-refine  { background: var(--yellow-dim); color: var(--yellow); border-color: rgba(255,209,102,0.3); }
+  .btn-delete  { background: var(--red-dim);    color: var(--red);    border-color: rgba(255,87,87,0.3); }
+  .btn-save    { background: var(--accent-dim); color: var(--accent); border-color: rgba(123,97,255,0.3); }
+  .btn-cancel  { background: var(--surface2);   color: var(--text-mid); border-color: var(--border); }
+  .btn-copy    { background: var(--blue-dim);   color: var(--blue);   border-color: rgba(87,184,255,0.3); }
+  .btn-copy.copied { background: var(--green-dim); color: var(--green); border-color: rgba(61,255,160,0.3); }
+  .btn-new     { background: var(--green-dim);  color: var(--green);  border-color: rgba(61,255,160,0.3); font-size: 11px; padding: 6px 12px; }
+
+  .spinner { width: 14px; height: 14px; border: 2px solid rgba(87,184,255,0.2); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .processing-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; height: 300px; color: var(--text-muted); font-size: 12px; }
+  .processing-state p { color: var(--blue); font-size: 13px; }
+
+  .published-banner { background: var(--green-dim); border: 1px solid rgba(61,255,160,0.25); border-radius: var(--radius); padding: 12px 16px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--green); }
+  .notion-link { color: var(--accent); text-decoration: none; margin-left: auto; }
+
+  /* ── Filter bar ── */
+  .filter-bar { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--border); }
+  .filter-row { display: flex; gap: 8px; }
+  .search-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 8px 12px; outline: none; }
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--text-muted); }
+  .filter-select { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 8px 12px; outline: none; cursor: pointer; }
+  .filter-select option { background: var(--surface); }
+
+  .saved-title { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .saved-raw { font-size: 10px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .saved-date { font-size: 9px; color: var(--text-muted); margin-left: auto; }
+
+  .pagination { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 10px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted); }
+  .page-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-mid); font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 5px 12px; cursor: pointer; }
+  .page-btn:hover { background: var(--accent-dim); color: var(--accent); }
+  .page-btn:disabled { opacity: 0.3; cursor: default; }
+
+  /* ── Agent editor ── */
+  .agent-item { flex-direction: row; align-items: center; gap: 10px; padding: 12px 14px; }
+  .agent-icon { font-size: 22px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: var(--surface2); border-radius: 8px; flex-shrink: 0; }
+  .agent-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .agent-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agent-desc { font-size: 10px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agent-default-badge { font-size: 8px; background: var(--green-dim); color: var(--green); padding: 1px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+  .agent-feedback-badge { font-size: 8px; background: var(--blue-dim); color: var(--blue); padding: 1px 6px; border-radius: 3px; font-weight: 600; margin-left: 4px; }
+
+  /* Feedback section */
+  .feedback-section { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--surface2); }
+  .feedback-loading { font-size: 10px; color: var(--text-muted); }
+  .feedback-empty { display: flex; align-items: center; gap: 10px; }
+  .feedback-stats { display: flex; gap: 12px; }
+  .feedback-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 16px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); flex: 1; }
+  .feedback-stat-number { font-size: 18px; font-weight: 700; }
+  .feedback-stat-label { font-size: 9px; color: var(--text-muted); }
+  .feedback-stat-approved .feedback-stat-number { color: var(--green); }
+  .feedback-stat-rejected .feedback-stat-number { color: var(--red); }
+  .feedback-stat-total .feedback-stat-number { color: var(--blue); }
+  .feedback-details summary { outline: none; }
+  .feedback-examples { display: flex; flex-direction: column; gap: 8px; }
+  .feedback-example { padding: 8px 10px; border-radius: 6px; font-size: 10px; line-height: 1.5; border: 1px solid var(--border); }
+  .feedback-example-approved { background: rgba(81,207,102,0.05); border-color: rgba(81,207,102,0.2); }
+  .feedback-example-rejected { background: rgba(255,107,107,0.05); border-color: rgba(255,107,107,0.2); }
+  .feedback-example-header { font-weight: 700; font-size: 10px; margin-bottom: 4px; }
+  .feedback-example-approved .feedback-example-header { color: var(--green); }
+  .feedback-example-rejected .feedback-example-header { color: var(--red); }
+  .feedback-example-raw, .feedback-example-title, .feedback-example-reason { color: var(--text-mid); font-size: 10px; margin-top: 2px; }
+  .feedback-example-reason { color: var(--yellow); font-style: italic; }
+
+  .agent-form { display: flex; flex-direction: column; gap: 16px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-label { font-size: 10px; font-weight: 500; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
+  .form-row { display: flex; gap: 10px; }
+  .form-row > .form-group { flex: 1; }
+  .form-input {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    padding: 10px 12px; outline: none; transition: border-color 0.2s;
+  }
+  .form-input:focus { border-color: var(--accent); }
+  .form-input::placeholder { color: var(--text-muted); }
+  textarea.form-input { height: 200px; resize: vertical; line-height: 1.7; }
+  textarea.form-input.short { height: 120px; }
+  .form-input-icon { width: 60px; text-align: center; font-size: 24px; }
+
+  /* Images */
+  .images-area { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0; }
+  .img-thumb {
+    width: 80px; height: 80px; border-radius: var(--radius); border: 1px solid var(--border);
+    overflow: hidden; position: relative; cursor: pointer; transition: border-color 0.2s;
+  }
+  .img-thumb:hover { border-color: var(--red); }
+  .img-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .img-thumb .img-remove {
+    position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--red); color: #fff; font-size: 10px; display: none;
+    align-items: center; justify-content: center; cursor: pointer;
+  }
+  .img-thumb:hover .img-remove { display: flex; }
+  .img-upload-btn {
+    width: 80px; height: 80px; border-radius: var(--radius); border: 1px dashed var(--border);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    color: var(--text-muted); font-size: 24px; transition: border-color 0.2s, color 0.2s;
+  }
+  .img-upload-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .task-images-area {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    min-height: 0; transition: min-height 0.2s;
+  }
+  .task-images-area:has(.img-thumb) { min-height: 56px; }
+  .task-images-area .img-thumb { width: 48px; height: 48px; }
+  .task-images-area .img-upload-btn { width: 48px; height: 48px; font-size: 18px; flex-shrink: 0; }
+  .task-images-area .images-area { display: flex; gap: 6px; flex-wrap: wrap; }
+  .task-img-badge {
+    font-size: 9px; color: var(--blue); background: var(--blue-dim); border: 1px solid rgba(87,184,255,0.2);
+    padding: 2px 8px; border-radius: 3px; font-weight: 600; letter-spacing: 0.5px;
+  }
+
+  /* Pipeline mode selector */
+  .mode-selector { display: flex; gap: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .mode-btn {
+    background: var(--bg); border: none; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; font-weight: 500; padding: 6px 14px; cursor: pointer; transition: all 0.2s;
+    letter-spacing: 0.5px;
+  }
+  .mode-btn:not(:last-child) { border-right: 1px solid var(--border); }
+  .mode-btn:hover { color: var(--text-mid); }
+  .mode-btn.active { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+  .validator-row { display: none; }
+  .validator-row.visible { display: flex; }
+
+  /* Pipeline / validation badges */
+  .tag-pipeline { color: var(--accent); border-color: rgba(123,97,255,0.3); background: var(--accent-dim); font-size: 9px; }
+  .tag-simple { color: var(--text-muted); border-color: var(--border); background: var(--surface2); font-size: 9px; }
+  .tag-val-approved { color: var(--green); border-color: rgba(61,255,160,0.3); background: var(--green-dim); font-size: 9px; }
+  .tag-val-patched { color: var(--yellow); border-color: rgba(255,209,102,0.3); background: var(--yellow-dim); font-size: 9px; }
+  .validation-notes-box {
+    background: var(--yellow-dim); border: 1px solid rgba(255,209,102,0.25); border-radius: var(--radius);
+    padding: 12px 16px; font-size: 11px; line-height: 1.7; color: var(--yellow);
+  }
+  .validation-notes-box ul { list-style: none; padding: 0; margin: 6px 0 0; }
+  .validation-notes-box li { padding: 2px 0; }
+  .validation-notes-box li::before { content: '→ '; color: var(--yellow); opacity: 0.6; }
+
+  /* Conversation history */
+  .convo-list { display: flex; flex-direction: column; gap: 10px; }
+  .convo-msg {
+    padding: 12px 14px; border-radius: var(--radius); font-size: 11px; line-height: 1.7;
+    max-width: 90%; white-space: pre-wrap; word-break: break-word;
+  }
+  .convo-msg.user { background: var(--accent-dim); border: 1px solid rgba(123,97,255,0.2); align-self: flex-end; color: var(--text); }
+  .convo-msg.assistant { background: var(--surface); border: 1px solid var(--border); align-self: flex-start; color: var(--text-mid); }
+  .convo-role { font-size: 9px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+  .convo-msg.user .convo-role { color: var(--accent); }
+  .convo-msg.assistant .convo-role { color: var(--green); }
+  .convo-version { font-size: 9px; color: var(--text-muted); }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; backdrop-filter: blur(4px); }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 520px; max-width: 90vw; padding: 28px; display: flex; flex-direction: column; gap: 16px; }
+  .modal-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; }
+  .modal-subtitle { font-size: 11px; color: var(--text-muted); line-height: 1.6; }
+  .modal textarea { height: 120px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+  /* Pipeline timeline */
+  .pipeline-timeline {
+    display: flex; flex-direction: column; gap: 0; padding: 0; margin: 0 auto; width: 100%; max-width: 560px;
+  }
+  .pipeline-step {
+    display: flex; align-items: flex-start; gap: 14px; position: relative; padding-bottom: 0;
+  }
+  .pipeline-step:last-child .step-line { display: none; }
+  .step-indicator {
+    display: flex; flex-direction: column; align-items: center; flex-shrink: 0; position: relative; z-index: 1;
+  }
+  .step-dot {
+    width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; border: 2px solid; transition: all 0.3s;
+  }
+  .step-dot.pending  { background: var(--surface2); border-color: var(--border); color: var(--text-muted); }
+  .step-dot.running  { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); animation: pulse-step 1.5s ease-in-out infinite; }
+  .step-dot.done     { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+  .step-dot.error    { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+  @keyframes pulse-step {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(87,184,255,0.3); }
+    50% { box-shadow: 0 0 0 8px rgba(87,184,255,0); }
+  }
+  .step-line {
+    width: 2px; flex: 1; min-height: 28px; margin: 4px 0;
+    transition: background 0.3s;
+  }
+  .step-line.pending { background: var(--border); }
+  .step-line.done    { background: var(--green); opacity: 0.4; }
+  .step-line.running { background: var(--blue); opacity: 0.4; }
+  .step-line.error   { background: var(--red); opacity: 0.4; }
+  .step-content {
+    flex: 1; padding: 4px 0 24px;
+  }
+  .step-label {
+    font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 2px;
+  }
+  .step-label.pending { color: var(--text-muted); }
+  .step-label.running { color: var(--blue); }
+  .step-label.done    { color: var(--green); }
+  .step-label.error   { color: var(--red); }
+  .step-desc {
+    font-size: 10px; color: var(--text-muted); line-height: 1.5;
+  }
+  .step-time {
+    font-size: 9px; color: var(--text-muted); opacity: 0.7; margin-top: 2px;
+  }
+  .step-preview {
+    margin-top: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px 12px; font-size: 10px; color: var(--text-muted); line-height: 1.6;
+    max-height: 100px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+  }
+
+  details[open] .timeline-arrow { transform: rotate(90deg); }
+
+  /* Custom format rendering */
+  .custom-header-tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .custom-tag {
+    font-size: 10px; padding: 3px 10px; border-radius: 3px; font-weight: 600; letter-spacing: 0.5px;
+    border: 1px solid; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .custom-tag-default  { color: var(--text-mid); border-color: var(--border); background: var(--surface2); }
+  .custom-tag-status   { color: var(--yellow); border-color: rgba(255,209,102,0.3); background: var(--yellow-dim); }
+  .custom-tag-area     { color: var(--blue); border-color: rgba(87,184,255,0.3); background: var(--blue-dim); }
+  .custom-tag-type     { color: var(--accent); border-color: rgba(123,97,255,0.3); background: var(--accent-dim); }
+  .custom-tag-number   { color: var(--green); border-color: rgba(61,255,160,0.3); background: var(--green-dim); }
+  .custom-tag-priority { color: var(--orange); border-color: rgba(255,159,67,0.3); background: var(--orange-dim); }
+  .custom-tag-severity { color: var(--red); border-color: rgba(255,87,87,0.3); background: var(--red-dim); }
+
+  .custom-field-text {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px; font-size: 12px; line-height: 1.8; color: var(--text-mid); white-space: pre-wrap; word-break: break-word;
+  }
+  .custom-field-highlight {
+    background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: var(--radius); padding: 14px; font-size: 12px; line-height: 1.8; color: var(--text-mid);
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .custom-list-numbered { display: flex; flex-direction: column; gap: 6px; counter-reset: custom-list; }
+  .custom-list-numbered .list-item { counter-increment: custom-list; }
+  .custom-list-numbered .list-item::before { content: counter(custom-list) '.'; color: var(--accent); font-weight: 600; font-size: 10px; min-width: 18px; }
+
+  #toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 16px; font-size: 12px; color: var(--text); opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100; }
+  #toast.show { opacity: 1; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">task<span>.</span>refiner</div>
+    <div class="tab-bar">
+      <button class="tab-btn active" data-view="refine" onclick="switchView('refine')">⚡ Refinar</button>
+      <button class="tab-btn" data-view="saved" onclick="switchView('saved')">📦 Tasks Salvas</button>
+      <button class="tab-btn" data-view="agents" onclick="switchView('agents')">🤖 Agents</button>
+    </div>
+    <div class="stats-bar" id="statsBar">
+      <div class="stat"><div class="stat-dot" style="background:var(--text-muted)"></div><span id="s-waiting">0</span> waiting</div>
+      <div class="stat"><div class="stat-dot" style="background:var(--blue)"></div><span id="s-processing">0</span> processing</div>
+      <div class="stat"><div class="stat-dot" style="background:var(--yellow)"></div><span id="s-review">0</span> in review</div>
+      <div class="stat"><div class="stat-dot" style="background:var(--green)"></div><span id="s-published">0</span> saved</div>
+    </div>
+  </header>
+
+  <!-- ═══ REFINE VIEW ═══ -->
+  <div class="view view-refine active" id="viewRefine">
+  <div class="panel-left">
+      <div class="panel-title">Queue <span class="queue-badge" id="queueCount">0</span></div>
+    <div class="input-area">
+        <div class="mode-selector" id="modeSelector">
+          <button class="mode-btn active" data-mode="simple" onclick="setMode('simple')">⚡ Simple</button>
+          <button class="mode-btn" data-mode="pipeline" onclick="setMode('pipeline')">🔗 Pipeline</button>
+        </div>
+        <div class="agent-selector">
+          <label>Refiner:</label>
+          <select class="agent-select" id="refineAgentSelect"></select>
+        </div>
+        <div class="agent-selector validator-row" id="validatorRow">
+          <label>Validator:</label>
+          <select class="agent-select" id="validatorAgentSelect"></select>
+        </div>
+      <textarea id="taskInput" placeholder="Cole suas tasks aqui, uma por linha:
+
+Criar tela de login com OAuth
+Implementar paginação no endpoint /users
+Setup CI/CD no GitHub Actions"></textarea>
+        <div class="task-images-area">
+          <div class="images-area" id="taskImagesPreview"></div>
+          <div class="img-upload-btn" onclick="document.getElementById('taskImageInput').click()" title="Anexar imagens à task">📷</div>
+          <input type="file" id="taskImageInput" accept="image/*" multiple style="display:none" />
+    </div>
+        <div class="hint">↵ Uma task por linha · Ctrl+Enter para enviar · 📷 Imagens são enviadas com cada task</div>
+        <button class="btn-add" onclick="submitTasks()"><span>+ Adicionar à fila</span></button>
+      </div>
+    <div class="jobs-list" id="jobsList"></div>
+  </div>
+  <div class="panel-right" id="detailPanel">
+      <div class="empty"><div class="empty-icon">⬡</div><h3>Nenhuma task selecionada</h3><p>Adicione tasks na fila e selecione uma para revisar</p></div>
+    </div>
+  </div>
+
+  <!-- ═══ SAVED VIEW ═══ -->
+  <div class="view view-saved" id="viewSaved">
+    <div class="saved-panel-left">
+      <div class="panel-title">Tasks Salvas <span class="queue-badge" id="savedCount">0</span></div>
+      <div class="filter-bar">
+        <div class="filter-row">
+          <input type="text" class="search-input" id="searchInput" placeholder="Buscar tasks..." />
+          <select class="filter-select" id="statusFilter" onchange="loadSavedTasks()">
+            <option value="">Todos</option>
+            <option value="published">Published</option>
+            <option value="review">Review</option>
+            <option value="rejected">Rejected</option>
+            <option value="error">Error</option>
+          </select>
+        </div>
+      </div>
+      <div class="saved-list" id="savedList"></div>
+      <div class="pagination" id="pagination"></div>
+    </div>
+    <div class="panel-right" id="savedDetailPanel">
+      <div class="empty"><div class="empty-icon">📦</div><h3>Selecione uma task</h3><p>Clique em uma task para ver detalhes</p></div>
+  </div>
+</div>
+
+  <!-- ═══ AGENTS VIEW ═══ -->
+  <div class="view view-agents" id="viewAgents">
+    <div class="agents-panel-left">
+      <div class="panel-title">
+        Agents
+        <button class="btn-new" onclick="newAgent()">+ Novo</button>
+      </div>
+      <div class="agents-list" id="agentsList"></div>
+    </div>
+    <div class="panel-right" id="agentDetailPanel">
+      <div class="empty"><div class="empty-icon">🤖</div><h3>Selecione um agent</h3><p>Crie ou edite agents para customizar o refinamento</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- Re-refine modal -->
+<div class="modal-overlay" id="reRefineModal" style="display:none">
+  <div class="modal">
+    <div class="modal-title">🔄 Re-Refinar Task</div>
+    <div class="modal-subtitle" id="reRefineTaskTitle"></div>
+    <div class="mode-selector" id="reRefineModeSelector" style="margin-bottom:4px">
+      <button class="mode-btn active" data-mode="simple" onclick="setReRefineMode('simple')">⚡ Simple</button>
+      <button class="mode-btn" data-mode="pipeline" onclick="setReRefineMode('pipeline')">🔗 Pipeline</button>
+    </div>
+    <div class="agent-selector" style="margin-bottom:4px">
+      <label>Refiner:</label>
+      <select class="agent-select" id="reRefineAgentSelect"></select>
+    </div>
+    <div class="agent-selector validator-row" id="reRefineValidatorRow" style="margin-bottom:4px">
+      <label>Validator:</label>
+      <select class="agent-select" id="reRefineValidatorSelect"></select>
+    </div>
+    <textarea id="improvementNotes" placeholder="Descreva os pontos de melhoria..."></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeReRefineModal()">Cancelar</button>
+      <button class="btn btn-refine" onclick="submitReRefine()">🔄 Re-Refinar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Conversation modal -->
+<div class="modal-overlay" id="convoModal" style="display:none">
+  <div class="modal" style="width:700px;max-height:80vh">
+    <div class="modal-title">💬 Histórico da Conversa</div>
+    <div id="convoContent" style="overflow-y:auto;max-height:60vh;display:flex;flex-direction:column;gap:10px;padding:8px 0"></div>
+    <div class="modal-actions"><button class="btn btn-cancel" onclick="closeConvoModal()">Fechar</button></div>
+  </div>
+</div>
+
+<input type="file" id="imageUploadInput" accept="image/*" style="display:none" />
+<div id="toast"></div>
+
+<script>
+  const API = window.location.origin;
+let jobs = [], selectedId = null, es = null;
+let savedTasks = [], savedSelectedId = null, savedPage = 1, savedTotal = 0, savedTotalPages = 1;
+let agents = [], selectedAgentId = null, editingAgent = null;
+let reRefineTaskId = null, searchDebounce = null;
+let taskImageFiles = []; // files selected for the current task submission
+let currentMode = localStorage.getItem('pipelineMode') || 'simple'; // 'simple' | 'pipeline'
+let reRefineMode = 'simple';
+
+// ═══════════════════════════════════════════
+// VIEW SWITCHING
+// ═══════════════════════════════════════════
+function switchView(view) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  const viewMap = { refine: 'viewRefine', saved: 'viewSaved', agents: 'viewAgents' };
+  document.getElementById(viewMap[view]).classList.add('active');
+  document.querySelector(`[data-view="${view}"]`).classList.add('active');
+  if (view === 'saved') loadSavedTasks();
+  if (view === 'agents') loadAgents();
+}
+
+// ═══════════════════════════════════════════
+// PIPELINE MODE
+// ═══════════════════════════════════════════
+function setMode(mode) {
+  currentMode = mode;
+  localStorage.setItem('pipelineMode', mode);
+  document.querySelectorAll('#modeSelector .mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  document.getElementById('validatorRow').classList.toggle('visible', mode === 'pipeline');
+}
+
+function setReRefineMode(mode) {
+  reRefineMode = mode;
+  document.querySelectorAll('#reRefineModeSelector .mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  document.getElementById('reRefineValidatorRow').classList.toggle('visible', mode === 'pipeline');
+}
+
+function initModeSelector() {
+  // Restore persisted mode preference
+  setMode(currentMode);
+}
+
+// ═══════════════════════════════════════════
+// AGENTS
+// ═══════════════════════════════════════════
+async function loadAgents() {
+  try {
+    const res = await fetch(`${API}/api/agents`);
+    agents = await res.json();
+    renderAgentsList();
+    populateAgentSelectors();
+  } catch (err) { console.error('Failed to load agents:', err); }
+}
+
+function populateAgentSelectors() {
+  // Refiner selectors — show all agents, default selected
+  ['refineAgentSelect', 'reRefineAgentSelect'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = agents.map(a =>
+      `<option value="${a.id}" ${a.isDefault ? 'selected' : ''}>${a.icon} ${a.name}${a.isDefault ? ' (padrão)' : ''}</option>`
+    ).join('');
+  });
+  // Validator selectors — show all agents, pre-select the default validator
+  ['validatorAgentSelect', 'reRefineValidatorSelect'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = agents.map(a =>
+      `<option value="${a.id}" ${a.id === 'default-validator-001' ? 'selected' : ''}>${a.icon} ${a.name}</option>`
+    ).join('');
+  });
+}
+
+async function renderAgentsList() {
+  const el = document.getElementById('agentsList');
+  el.innerHTML = '';
+  if (agents.length === 0) {
+    el.innerHTML = '<div class="empty" style="padding:40px 0"><div class="empty-icon">🤖</div><h3>Nenhum agent</h3><p>Crie seu primeiro agent</p></div>';
+    return;
+  }
+
+  // Load feedback counts for all agents in parallel
+  const feedbackCounts = {};
+  try {
+    await Promise.all(agents.map(async a => {
+      try {
+        const res = await fetch(`${API}/api/agents/${a.id}/feedback?maxApproved=0&maxRejected=0`);
+        const data = await res.json();
+        feedbackCounts[a.id] = { approved: data.approvedCount, rejected: data.rejectedCount };
+      } catch { feedbackCounts[a.id] = { approved: 0, rejected: 0 }; }
+    }));
+  } catch {}
+
+  agents.forEach(a => {
+    const div = document.createElement('div');
+    div.className = `agent-item ${a.id === selectedAgentId ? 'active' : ''}`;
+    div.onclick = () => { selectedAgentId = a.id; editingAgent = null; renderAgentsList(); renderAgentDetail(a); };
+    const fb = feedbackCounts[a.id] || { approved: 0, rejected: 0 };
+    const fbTotal = fb.approved + fb.rejected;
+    const fbBadge = fbTotal > 0
+      ? `<span class="agent-feedback-badge" title="${fb.approved} aprovadas, ${fb.rejected} rejeitadas — usadas como aprendizado">📚 ${fbTotal}</span>`
+      : '';
+    div.innerHTML = `
+      <div class="agent-icon">${a.icon}</div>
+      <div class="agent-info">
+        <div class="agent-name">${esc(a.name)} ${a.isDefault ? '<span class="agent-default-badge">padrão</span>' : ''} ${fbBadge}</div>
+        <div class="agent-desc">${esc(a.description || '')}</div>
+      </div>`;
+    el.appendChild(div);
+  });
+}
+
+function newAgent() {
+  selectedAgentId = null;
+  editingAgent = {
+    id: null, name: '', description: '', icon: '🤖',
+    systemPrompt: '', contextText: '', outputFormat: '',
+    model: 'claude-sonnet-4-20250514', maxTokens: 4000
+  };
+  renderAgentsList();
+  renderAgentForm();
+}
+
+async function renderAgentDetail(agent) {
+  editingAgent = { ...agent };
+  renderAgentForm();
+}
+
+async function renderAgentForm() {
+  const a = editingAgent;
+  const panel = document.getElementById('agentDetailPanel');
+  const isNew = !a.id;
+  const images = a.id ? await fetchAgentImages(a.id) : [];
+
+  panel.innerHTML = `
+    <div class="task-header">
+      <div class="task-title">${isNew ? '✨ Novo Agent' : `${a.icon} ${esc(a.name)}`}</div>
+    </div>
+    <div class="agent-form">
+      <div class="form-row">
+        <div class="form-group" style="flex:0 0 80px">
+          <div class="form-label">Ícone</div>
+          <input class="form-input form-input-icon" id="fIcon" value="${a.icon}" maxlength="4" />
+        </div>
+        <div class="form-group">
+          <div class="form-label">Nome</div>
+          <input class="form-input" id="fName" value="${esc(a.name)}" placeholder="Ex: Tech Lead, QA Specialist..." />
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="form-label">Descrição</div>
+        <input class="form-input" id="fDesc" value="${esc(a.description || '')}" placeholder="Descrição curta do agent..." />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <div class="form-label">Modelo</div>
+          <select class="form-input" id="fModel" style="cursor:pointer">
+            <option value="claude-sonnet-4-20250514" ${a.model === 'claude-sonnet-4-20250514' ? 'selected' : ''}>Claude Sonnet 4</option>
+            <option value="claude-opus-4-20250514" ${a.model === 'claude-opus-4-20250514' ? 'selected' : ''}>Claude Opus 4</option>
+            <option value="claude-3-5-sonnet-20241022" ${a.model === 'claude-3-5-sonnet-20241022' ? 'selected' : ''}>Claude 3.5 Sonnet</option>
+            <option value="claude-3-5-haiku-20241022" ${a.model === 'claude-3-5-haiku-20241022' ? 'selected' : ''}>Claude 3.5 Haiku</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <div class="form-label">Max Tokens</div>
+          <input class="form-input" id="fMaxTokens" type="number" value="${a.maxTokens || 4000}" min="500" max="16000" />
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="form-label">System Prompt (Personalidade e instruções do agent)</div>
+        <textarea class="form-input" id="fSystemPrompt" placeholder="Defina quem é o agent, como ele deve se comportar, quais instruções seguir...">${esc(a.systemPrompt || '')}</textarea>
+      </div>
+      <div class="form-group">
+        <div class="form-label">Contexto Adicional (textos, docs, specs, referências)</div>
+        <textarea class="form-input" id="fContextText" placeholder="Cole aqui documentos de referência, specs, padrões do projeto, etc...">${esc(a.contextText || '')}</textarea>
+      </div>
+      <div class="form-group">
+        <div class="form-label">Formato de Saída</div>
+        <div class="mode-selector" id="outputFormatSelector" style="margin-bottom:8px">
+          <button class="mode-btn ${!a.outputFormat ? 'active' : ''}" data-fmt="default" onclick="setOutputFormatMode('default')">📋 Padrão</button>
+          <button class="mode-btn ${a.outputFormat ? 'active' : ''}" data-fmt="custom" onclick="setOutputFormatMode('custom')">✏️ Customizado</button>
+        </div>
+        <div id="defaultFormatPreview" style="display:${!a.outputFormat ? 'block' : 'none'}">
+          <div class="desc-box" style="font-size:10px;line-height:1.6;color:var(--text-muted);max-height:180px;overflow-y:auto;white-space:pre-wrap">{ title, description, epic, subtasks[{title,description}], acceptance_criteria[{given,when,then}], effort (P|M|G|GG), effort_points (1|3|5|8), dependencies[], risks[], labels[], suggested_assignee_role }</div>
+          <div class="hint" style="margin-top:6px">Formato padrão de refinamento — inclui título, descrição, subtasks, critérios de aceite, esforço, riscos e dependências.</div>
+        </div>
+        <div id="customFormatArea" style="display:${a.outputFormat ? 'block' : 'none'}">
+          <textarea class="form-input short" id="fOutputFormat" placeholder='Defina o JSON template desejado para a saída do agent. Ex:
+{
+  "titulo": "...",
+  "descricao": "...",
+  "passos": [{ "nome": "...", "detalhe": "..." }],
+  "prioridade": "alta | media | baixa"
+}'>${esc(a.outputFormat || '')}</textarea>
+          <div class="hint" style="margin-top:6px">⚠️ O agent vai retornar EXATAMENTE neste formato JSON. Defina todas as chaves desejadas.</div>
+        </div>
+      </div>
+      ${a.id ? `
+      <div class="form-group">
+        <div class="form-label">Imagens de Contexto (enviadas junto com as tasks para o Claude)</div>
+        <div class="images-area" id="imagesArea">
+          ${images.map(img => `
+            <div class="img-thumb" title="${esc(img.filename)}">
+              <img src="${API}/api/images/${img.id}" />
+              <div class="img-remove" onclick="event.stopPropagation(); removeAgentImage('${img.id}')">✕</div>
+            </div>
+          `).join('')}
+          <div class="img-upload-btn" onclick="triggerImageUpload('${a.id}')">+</div>
+        </div>
+      </div>
+      ` : '<div class="hint" style="color:var(--yellow)">💡 Salve o agent primeiro para poder adicionar imagens</div>'}
+      ${a.id ? `<div class="form-group">
+        <div class="form-label">Aprendizado por Feedback</div>
+        <div class="feedback-section" id="feedbackSection">
+          <div class="feedback-loading">Carregando feedback...</div>
+        </div>
+      </div>` : ''}
+      <div class="action-bar">
+        <button class="btn btn-save" onclick="saveAgent()">${isNew ? '✨ Criar Agent' : '💾 Salvar Alterações'}</button>
+        ${!isNew && !a.isDefault ? `<button class="btn btn-approve" onclick="setAgentDefault('${a.id}')">⭐ Tornar Padrão</button>` : ''}
+        ${!isNew && !a.isDefault ? `<button class="btn btn-delete" onclick="removeAgent('${a.id}')">🗑 Excluir</button>` : ''}
+      </div>
+    </div>`;
+
+  // Load feedback data if editing existing agent
+  if (a.id) loadAgentFeedback(a.id);
+}
+
+async function loadAgentFeedback(agentId) {
+  const section = document.getElementById('feedbackSection');
+  if (!section) return;
+  try {
+    const res = await fetch(`${API}/api/agents/${agentId}/feedback`);
+    const data = await res.json();
+    const total = data.approvedCount + data.rejectedCount;
+
+    if (total === 0) {
+      section.innerHTML = `
+        <div class="feedback-empty">
+          <span style="font-size:18px">📝</span>
+          <div>
+            <div style="font-weight:600;font-size:11px;color:var(--text-mid)">Nenhum feedback ainda</div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:2px">Aprove ou rejeite tasks para que o agent aprenda com exemplos reais</div>
+          </div>
+        </div>`;
+      return;
+    }
+
+    let html = `
+      <div class="feedback-stats">
+        <div class="feedback-stat feedback-stat-approved">
+          <span class="feedback-stat-number">${data.approvedCount}</span>
+          <span class="feedback-stat-label">✅ aprovadas</span>
+        </div>
+        <div class="feedback-stat feedback-stat-rejected">
+          <span class="feedback-stat-number">${data.rejectedCount}</span>
+          <span class="feedback-stat-label">❌ rejeitadas</span>
+        </div>
+        <div class="feedback-stat feedback-stat-total">
+          <span class="feedback-stat-number">${total}</span>
+          <span class="feedback-stat-label">📚 exemplos</span>
+        </div>
+      </div>
+      <div class="hint" style="margin-top:8px">O agent usa estes exemplos como referência ao refinar novas tasks — aprovadas como "o que fazer" e rejeitadas como "o que evitar".</div>`;
+
+    if (data.approved.length > 0 || data.rejected.length > 0) {
+      html += `<details class="feedback-details" style="margin-top:10px">
+        <summary style="font-size:10px;font-weight:600;color:var(--text-muted);cursor:pointer;user-select:none">Ver exemplos de feedback</summary>
+        <div class="feedback-examples" style="margin-top:8px">`;
+
+      data.approved.forEach((ex, i) => {
+        html += `<div class="feedback-example feedback-example-approved">
+          <div class="feedback-example-header">✅ Aprovado #${i+1}</div>
+          <div class="feedback-example-raw"><strong>Task crua:</strong> ${esc(ex.rawTask)}</div>
+          <div class="feedback-example-title"><strong>Título gerado:</strong> ${esc(ex.title || '—')}</div>
+        </div>`;
+      });
+
+      data.rejected.forEach((ex, i) => {
+        html += `<div class="feedback-example feedback-example-rejected">
+          <div class="feedback-example-header">❌ Rejeitado #${i+1}</div>
+          <div class="feedback-example-raw"><strong>Task crua:</strong> ${esc(ex.rawTask)}</div>
+          <div class="feedback-example-title"><strong>Título gerado:</strong> ${esc(ex.title || '—')}</div>
+          ${ex.rejectReason ? `<div class="feedback-example-reason"><strong>Motivo:</strong> ${esc(ex.rejectReason)}</div>` : ''}
+        </div>`;
+      });
+
+      html += `</div></details>`;
+    }
+
+    section.innerHTML = html;
+  } catch (err) {
+    section.innerHTML = `<div class="hint" style="color:var(--red)">Erro ao carregar feedback: ${esc(err.message)}</div>`;
+  }
+}
+
+function setOutputFormatMode(mode) {
+  const selector = document.getElementById('outputFormatSelector');
+  selector.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.fmt === mode));
+  document.getElementById('defaultFormatPreview').style.display = mode === 'default' ? 'block' : 'none';
+  document.getElementById('customFormatArea').style.display = mode === 'custom' ? 'block' : 'none';
+  if (mode === 'default') {
+    const fmtEl = document.getElementById('fOutputFormat');
+    if (fmtEl) fmtEl.value = '';
+  }
+}
+
+async function fetchAgentImages(agentId) {
+  try {
+    const res = await fetch(`${API}/api/agents/${agentId}/images`);
+    return await res.json();
+  } catch { return []; }
+}
+
+async function saveAgent() {
+  const data = {
+    name: document.getElementById('fName').value.trim(),
+    description: document.getElementById('fDesc').value.trim(),
+    icon: document.getElementById('fIcon').value.trim() || '🤖',
+    systemPrompt: document.getElementById('fSystemPrompt').value.trim(),
+    contextText: document.getElementById('fContextText').value.trim(),
+    outputFormat: (document.getElementById('fOutputFormat') ? document.getElementById('fOutputFormat').value.trim() : ''),
+    model: document.getElementById('fModel').value,
+    maxTokens: parseInt(document.getElementById('fMaxTokens').value) || 4000,
+  };
+  if (!data.name || !data.systemPrompt) { toast('Nome e System Prompt são obrigatórios', true); return; }
+  try {
+    const isNew = !editingAgent.id;
+    const res = await fetch(`${API}/api/agents${isNew ? '' : '/' + editingAgent.id}`, {
+      method: isNew ? 'POST' : 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const agent = await res.json();
+    if (!res.ok) { toast('Erro: ' + (agent.error || agent.detail), true); return; }
+    toast(isNew ? '✨ Agent criado!' : '💾 Agent salvo!');
+    editingAgent = agent;
+    selectedAgentId = agent.id;
+    await loadAgents();
+    renderAgentDetail(agent);
+  } catch (err) { toast('Erro ao salvar agent', true); }
+}
+
+async function removeAgent(id) {
+  if (!confirm('Excluir este agent?')) return;
+  try {
+    const res = await fetch(`${API}/api/agents/${id}`, { method: 'DELETE' });
+    if (!res.ok) { const d = await res.json(); toast('Erro: ' + d.error, true); return; }
+    toast('Agent excluído');
+    selectedAgentId = null;
+    editingAgent = null;
+    document.getElementById('agentDetailPanel').innerHTML = '<div class="empty"><div class="empty-icon">🤖</div><h3>Selecione um agent</h3></div>';
+    await loadAgents();
+  } catch { toast('Erro ao excluir', true); }
+}
+
+async function setAgentDefault(id) {
+  try {
+    await fetch(`${API}/api/agents/${id}/default`, { method: 'POST' });
+    toast('⭐ Agent definido como padrão');
+    await loadAgents();
+    const agent = agents.find(a => a.id === id);
+    if (agent) renderAgentDetail(agent);
+  } catch { toast('Erro', true); }
+}
+
+function triggerImageUpload(agentId) {
+  const input = document.getElementById('imageUploadInput');
+  input.onchange = async () => {
+    if (!input.files[0]) return;
+    const form = new FormData();
+    form.append('image', input.files[0]);
+    try {
+      const res = await fetch(`${API}/api/agents/${agentId}/images`, { method: 'POST', body: form });
+      if (!res.ok) { toast('Erro ao enviar imagem', true); return; }
+      toast('📷 Imagem adicionada');
+      const agent = agents.find(a => a.id === agentId);
+      if (agent) renderAgentDetail(agent);
+    } catch { toast('Erro ao enviar', true); }
+    input.value = '';
+  };
+  input.click();
+}
+
+async function removeAgentImage(imageId) {
+  try {
+    await fetch(`${API}/api/images/${imageId}`, { method: 'DELETE' });
+    toast('Imagem removida');
+    const agent = agents.find(a => a.id === selectedAgentId);
+    if (agent) renderAgentDetail(agent);
+  } catch { toast('Erro ao remover', true); }
+}
+
+// ═══════════════════════════════════════════
+// SSE + REFINE
+// ═══════════════════════════════════════════
+function connectSSE() {
+  es = new EventSource(`${API}/api/tasks/stream/events`);
+  es.addEventListener('init', e => { jobs = JSON.parse(e.data); renderList(); if (selectedId) renderDetail(selectedId); });
+    ['job:added','job:processing','job:pipeline-step','job:review','job:approved','job:rejected','job:published','job:error'].forEach(evt => {
+      es.addEventListener(evt, e => {
+        const job = JSON.parse(e.data);
+        const idx = jobs.findIndex(j => j.id === job.id);
+        if (idx >= 0) jobs[idx] = job; else jobs.unshift(job);
+      renderList(); if (selectedId === job.id) renderDetail(job.id); updateStats();
+      });
+    });
+  es.addEventListener('job:removed', e => {
+    const job = JSON.parse(e.data);
+    jobs = jobs.filter(j => j.id !== job.id);
+    if (selectedId === job.id) { selectedId = null; document.getElementById('detailPanel').innerHTML = '<div class="empty"><div class="empty-icon">⬡</div><h3>Nenhuma task selecionada</h3></div>'; }
+    renderList(); updateStats();
+  });
+    es.onerror = () => setTimeout(connectSSE, 3000);
+  }
+
+  async function submitTasks() {
+    const raw = document.getElementById('taskInput').value.trim();
+    if (!raw) return;
+    const tasks = raw.split('\n').map(t => t.trim()).filter(Boolean);
+    const agentId = document.getElementById('refineAgentSelect').value || null;
+    const pipelineMode = currentMode;
+    const validatorAgentId = pipelineMode === 'pipeline' ? (document.getElementById('validatorAgentSelect').value || null) : null;
+
+    if (taskImageFiles.length > 0) {
+      // With images: send one task at a time via multipart FormData
+      for (const taskText of tasks) {
+        const form = new FormData();
+        form.append('task', taskText);
+        if (agentId) form.append('agentId', agentId);
+        if (pipelineMode) form.append('pipelineMode', pipelineMode);
+        if (validatorAgentId) form.append('validatorAgentId', validatorAgentId);
+        for (const file of taskImageFiles) {
+          form.append('images', file);
+        }
+        await fetch(`${API}/api/tasks/with-images`, { method: 'POST', body: form });
+      }
+    } else {
+      // No images: batch send as JSON
+    await fetch(`${API}/api/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tasks, agentId, pipelineMode, validatorAgentId }),
+    });
+    }
+
+    document.getElementById('taskInput').value = '';
+    clearTaskImages();
+    const modeLabel = pipelineMode === 'pipeline' ? ' (Pipeline)' : '';
+    toast(`${tasks.length} task(s) adicionada(s)${modeLabel}`);
+  }
+
+  function renderList() {
+    const el = document.getElementById('jobsList');
+    el.innerHTML = '';
+    jobs.forEach(job => {
+      const div = document.createElement('div');
+      div.className = `job-item ${job.id === selectedId ? 'active' : ''}`;
+      div.onclick = () => { selectedId = job.id; renderList(); renderDetail(job.id); };
+    const agentInfo = job.agentId ? agents.find(a => a.id === job.agentId) : null;
+      div.innerHTML = `
+      <div class="job-raw">${esc(job.rawTask)}</div>
+        <div class="job-meta">
+        <span class="status-badge status-${job.status}">${job.status}</span>
+        ${job.pipelineMode === 'pipeline' ? `<span class="tag tag-pipeline">🔗 Pipeline</span>` : ''}
+        ${job.validationStatus === 'approved' ? `<span class="tag tag-val-approved">✅ Valid</span>` : ''}
+        ${job.validationStatus === 'patched' ? `<span class="tag tag-val-patched">🔧 Patched</span>` : ''}
+        ${agentInfo ? `<span class="tag tag-agent">${agentInfo.icon}</span>` : ''}
+        ${job.hasImages ? `<span class="task-img-badge">📷 ${job.imageCount || ''}</span>` : ''}
+        ${job.version > 1 ? `<span class="tag tag-version">v${job.version}</span>` : ''}
+          <span class="job-time">${timeAgo(job.createdAt)}</span>
+        </div>`;
+      el.appendChild(div);
+    });
+    document.getElementById('queueCount').textContent = jobs.length;
+    updateStats();
+  }
+
+  function renderDetail(id) {
+    const job = jobs.find(j => j.id === id);
+    if (!job) return;
+    selectedId = id;
+    const panel = document.getElementById('detailPanel');
+  if (job.status === 'waiting') { panel.innerHTML = '<div class="processing-state"><div class="spinner"></div><p>Aguardando na fila...</p></div>'; return; }
+  if (job.status === 'processing') {
+    const hasSteps = job.pipelineSteps && job.pipelineSteps.length > 0;
+    panel.innerHTML = `<div style="padding:24px;display:flex;flex-direction:column;gap:20px;align-items:center">
+      <div style="text-align:center">
+        <div class="spinner" style="margin:0 auto 12px"></div>
+        <p style="color:var(--blue);font-size:13px;margin:0">Refinando...</p>
+        <small style="color:var(--text-muted)">Analisando com o agent</small>
+      </div>
+      ${hasSteps ? renderPipelineTimeline(job) : ''}
+    </div>`;
+    return;
+  }
+    if (job.status === 'error') {
+    panel.innerHTML = `
+      <div class="empty" style="gap:16px">
+        <div class="empty-icon">✕</div>
+        <h3>Erro ao refinar</h3>
+        <p style="max-width:500px;line-height:1.6">${esc(job.error)}</p>
+        <div class="section" style="width:100%;max-width:500px"><div class="section-label">Task Original</div><div class="raw-task-box">${esc(job.rawTask)}</div></div>
+        <div style="display:flex;gap:10px;margin-top:8px">
+          <button class="btn btn-refine" onclick="retryQueueJob('${job.id}')">🔄 Regenerar</button>
+          <button class="btn btn-delete" onclick="removeQueueJob('${job.id}')">🗑 Apagar</button>
+        </div>
+      </div>`;
+      return;
+    }
+  if (!job.result) { panel.innerHTML = '<div class="empty"><div class="empty-icon">⬡</div><h3>Sem resultado</h3></div>'; return; }
+  panel.innerHTML = renderTaskResult(job, { showActions: true, source: 'queue' });
+    }
+
+// ═══════════════════════════════════════════
+// TASK RESULT RENDERER
+// ═══════════════════════════════════════════
+
+// ═══════════════════════════════════════════
+// PIPELINE TIMELINE HELPERS (global scope)
+// ═══════════════════════════════════════════
+
+function formatTime(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch { return ''; }
+}
+
+function renderPipelineTimeline(job) {
+  const steps = job.pipelineSteps || [];
+  const isPipeline = job.pipelineMode === 'pipeline';
+  const isCompleted = ['review', 'approved', 'published', 'rejected'].includes(job.status);
+  const r = job.result || {};
+
+  // Agent info for labels
+  const refinerAgent = job.agentId ? agents.find(a => a.id === job.agentId) : (job.agentName ? { icon: job.agentIcon, name: job.agentName } : null);
+  const validatorAgent = job.validatorAgentId ? agents.find(a => a.id === job.validatorAgentId) : (job.validatorAgentName ? { icon: job.validatorAgentIcon, name: job.validatorAgentName } : null);
+
+  // Dynamic descriptions for completed tasks
+  const rawTaskPreview = `"${esc(job.rawTask.length > 80 ? job.rawTask.slice(0, 80) + '...' : job.rawTask)}"`;
+  const refinerLabel = refinerAgent ? `${refinerAgent.icon || '🤖'} ${esc(refinerAgent.name)}` : '🤖 Agent Refinador';
+  const validatorLabel = validatorAgent ? `${validatorAgent.icon || '✅'} ${esc(validatorAgent.name)}` : '✅ Agent Validator';
+
+  const refinerDesc = isCompleted ? 'Task analisada e estruturada com sucesso' : 'Analisando e estruturando a task...';
+  const refinedTitle = r.title || r.titulo || r.name || r.nome || '';
+  const refinedDesc = isCompleted && refinedTitle ? `"${esc(refinedTitle.length > 80 ? refinedTitle.slice(0, 80) + '...' : refinedTitle)}"` : 'JSON refinado gerado pelo agent';
+
+  const valStatus = job.validationStatus;
+  const validatorDesc = isCompleted
+    ? (valStatus === 'approved' ? 'Resultado validado sem alterações' : valStatus === 'patched' || valStatus === 'corrected' ? 'Resultado corrigido pelo validator' : 'Validação concluída')
+    : 'Validando e corrigindo o resultado...';
+  const validatedDesc = isCompleted
+    ? (job.status === 'published' ? 'Task publicada ✅' : job.status === 'approved' ? 'Task aprovada ✅' : job.status === 'rejected' ? `Task rejeitada${job.rejectReason ? ': ' + esc(job.rejectReason.length > 60 ? job.rejectReason.slice(0, 60) + '...' : job.rejectReason) : ''}` : 'Task pronta para revisão')
+    : 'Task validada e pronta para revisão';
+  const doneDesc = isCompleted
+    ? (job.status === 'published' ? 'Task publicada ✅' : job.status === 'approved' ? 'Task aprovada ✅' : job.status === 'rejected' ? `Task rejeitada${job.rejectReason ? ': ' + esc(job.rejectReason.length > 60 ? job.rejectReason.slice(0, 60) + '...' : job.rejectReason) : ''}` : 'Task pronta para revisão')
+    : 'Task refinada e pronta para revisão';
+
+  // Define the expected steps
+  const stepDefs = isPipeline
+    ? [
+        { key: 'queued',    icon: '📝', label: 'Task Crua',         desc: rawTaskPreview },
+        { key: 'refiner',   icon: '🤖', label: refinerLabel,        desc: refinerDesc },
+        { key: 'refined',   icon: '📋', label: 'Texto Refinado',    desc: refinedDesc },
+        { key: 'validator', icon: '✅', label: validatorLabel,      desc: validatorDesc },
+        { key: 'validated', icon: '🏁', label: 'Resultado Final',   desc: validatedDesc },
+      ]
+    : [
+        { key: 'queued',    icon: '📝', label: 'Task Crua',         desc: rawTaskPreview },
+        { key: 'refiner',   icon: '🤖', label: refinerLabel,        desc: refinerDesc },
+        { key: 'done',      icon: '🏁', label: 'Resultado Final',   desc: doneDesc },
+      ];
+
+  // Map step statuses
+  const stepMap = {};
+  steps.forEach(s => { stepMap[s.step] = s; });
+
+  // Determine status for each visual step
+  const resolvedSteps = stepDefs.map((def, i) => {
+    if (def.key === 'queued') return { ...def, status: 'done', time: job.createdAt };
+
+    // For 'refined' (the output of refiner)
+    if (def.key === 'refined') {
+      const refinerStep = stepMap['refiner'];
+      if (refinerStep?.status === 'done') return { ...def, status: 'done', time: refinerStep.timestamp };
+      if (refinerStep?.status === 'error') return { ...def, status: 'error', time: refinerStep.timestamp };
+      return { ...def, status: 'pending' };
+    }
+
+    // For 'validated' (the output of validator)
+    if (def.key === 'validated') {
+      const valStep = stepMap['validator'];
+      if (valStep?.status === 'done') return { ...def, status: 'done', time: valStep.timestamp, extra: valStep.validationStatus };
+      if (valStep?.status === 'error') return { ...def, status: 'error', time: valStep.timestamp };
+      return { ...def, status: 'pending' };
+    }
+
+    // For 'done' (simple mode final)
+    if (def.key === 'done') {
+      const refStep = stepMap['refiner'];
+      if (refStep?.status === 'done') return { ...def, status: 'done', time: refStep.timestamp };
+      if (refStep?.status === 'error') return { ...def, status: 'error', time: refStep.timestamp };
+      return { ...def, status: 'pending' };
+    }
+
+    // Refiner / validator steps
+    const stepData = stepMap[def.key];
+    if (stepData) return { ...def, status: stepData.status, time: stepData.timestamp, error: stepData.error };
+    return { ...def, status: 'pending' };
+  });
+
+  return `<div class="pipeline-timeline">
+    ${resolvedSteps.map((s, i) => {
+      const dotIcon = s.status === 'running' ? '<div class="spinner" style="width:14px;height:14px;border-width:2px"></div>'
+        : s.status === 'done' ? '✓' : s.status === 'error' ? '✕' : s.icon;
+      const lineStatus = s.status === 'done' ? 'done' : s.status === 'running' ? 'running' : s.status === 'error' ? 'error' : 'pending';
+      return `<div class="pipeline-step">
+        <div class="step-indicator">
+          <div class="step-dot ${s.status}">${dotIcon}</div>
+          ${i < resolvedSteps.length - 1 ? `<div class="step-line ${lineStatus}"></div>` : ''}
+        </div>
+        <div class="step-content">
+          <div class="step-label ${s.status}">${s.icon} ${s.label}${s.status === 'running' ? ' ...' : ''}</div>
+          <div class="step-desc">${s.error ? `<span style="color:var(--red)">${esc(s.error)}</span>` : s.desc}</div>
+          ${s.time ? `<div class="step-time">${formatTime(s.time)}</div>` : ''}
+          ${s.extra ? `<div class="step-desc" style="margin-top:2px;color:var(--yellow)">Status: ${esc(s.extra)}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// Build a job object with synthetic pipelineSteps for completed tasks that have no real-time steps
+function buildTimelineJob(job) {
+  // If already has real-time pipeline steps, use them as-is
+  if (job.pipelineSteps && job.pipelineSteps.length > 0) return job;
+
+  // Only build synthetic timeline for tasks that have a result (completed)
+  if (!job.result) return job;
+
+  const isPipeline = job.pipelineMode === 'pipeline';
+  const isError = job.status === 'error';
+
+  const steps = [];
+
+  // Step: queued (always done for completed tasks)
+  steps.push({ step: 'queued', status: 'done', timestamp: job.createdAt });
+
+  if (isPipeline) {
+    // Refiner step — always done if we have a result
+    steps.push({ step: 'refiner', status: isError ? 'error' : 'done', timestamp: job.updatedAt });
+
+    // Validator step
+    if (!isError) {
+      const valStatus = job.validationStatus;
+      steps.push({
+        step: 'validator',
+        status: 'done',
+        timestamp: job.updatedAt,
+        validationStatus: valStatus || 'approved',
+      });
+    }
+  } else {
+    // Simple mode: just refiner
+    steps.push({ step: 'refiner', status: isError ? 'error' : 'done', timestamp: job.updatedAt });
+  }
+
+  return { ...job, pipelineSteps: steps };
+}
+
+function renderTaskResult(job, { showActions = false, source = 'queue' } = {}) {
+    const r = job.result;
+    const isReview = job.status === 'review';
+    const isPublished = job.status === 'published';
+  const agentInfo = job.agentId ? agents.find(a => a.id === job.agentId) : (job.agentName ? { icon: job.agentIcon, name: job.agentName } : null);
+  const jobDataAttr = `data-job-id="${job.id}"`;
+
+  const isPipeline = job.pipelineMode === 'pipeline';
+  const valStatus = job.validationStatus;
+  const valNotes = job.validationNotes;
+  const validatorInfo = job.validatorAgentId ? agents.find(a => a.id === job.validatorAgentId) : (job.validatorAgentName ? { icon: job.validatorAgentIcon, name: job.validatorAgentName } : null);
+
+  // Detect if this is a standard format result (has the expected default keys)
+  const isStandardFormat = r.title && r.description && (r.subtasks || r.acceptance_criteria || r.effort);
+
+  // ── Banners (always shown) ──
+  const banners = `
+    ${isPublished ? `<div class="published-banner">✓ Salvo no banco${job.notionUrl ? ` e Notion <a class="notion-link" href="${job.notionUrl}" target="_blank">→</a>` : ''}</div>` : ''}
+    ${isPipeline ? `<div class="published-banner" style="background:var(--accent-dim);border-color:rgba(123,97,255,0.25);color:var(--accent)">🔗 Pipeline Mode${validatorInfo ? ` · Validator: ${validatorInfo.icon || '✅'} ${esc(validatorInfo.name || '')}` : ''}${valStatus ? ` · <strong>${valStatus === 'approved' ? '✅ Approved' : '🔧 Patched'}</strong>` : ''}</div>` : ''}
+    ${valStatus === 'patched' && valNotes && valNotes.length > 0 ? `<div class="validation-notes-box"><strong>🔧 Correções do Validator (${valNotes.length}):</strong><ul>${valNotes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>` : ''}
+    ${job.version > 1 ? `<div class="published-banner" style="background:var(--yellow-dim);border-color:rgba(255,209,102,0.25);color:var(--yellow)">🔄 Re-refinamento v${job.version}${job.improvementNotes ? ` — "${esc(job.improvementNotes)}"` : ''}</div>` : ''}
+    ${agentInfo ? `<div class="published-banner" style="background:var(--orange-dim);border-color:rgba(255,159,67,0.25);color:var(--orange)">${agentInfo.icon || '🤖'} Refiner: ${esc(agentInfo.name || '')}</div>` : ''}`;
+
+  // ── Pipeline timeline (collapsible) ──
+  // If no real-time pipelineSteps exist, build a synthetic timeline from DB fields
+  const jobForTimeline = buildTimelineJob(job);
+  const hasTimelineSteps = jobForTimeline.pipelineSteps && jobForTimeline.pipelineSteps.length > 0;
+  const timelineHtml = hasTimelineSteps ? `
+    <details class="section" style="cursor:pointer">
+      <summary style="font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);list-style:none;display:flex;align-items:center;gap:8px;user-select:none">
+        <span style="transition:transform 0.2s;display:inline-block" class="timeline-arrow">▶</span> Pipeline Timeline
+        <span style="flex:1;height:1px;background:var(--border)"></span>
+      </summary>
+      <div style="margin-top:16px">${renderPipelineTimeline(jobForTimeline)}</div>
+    </details>` : '';
+
+  // ── Actions bar (always shown) ──
+  const actionsHtml = showActions ? `<div class="action-bar">
+      <button class="btn btn-copy" onclick="copyTaskResult('${job.id}', '${source}', this)">📋 Copiar Task</button>
+      ${isReview && source === 'queue' ? `<button class="btn btn-approve" onclick="approveJob('${job.id}')">✓ Aprovar & Salvar</button><button class="btn btn-reject" onclick="rejectJob('${job.id}')">✕ Rejeitar</button>` : ''}
+      ${source === 'saved' ? `<button class="btn btn-refine" onclick="openReRefineModal('${job.id}')">🔄 Re-Refinar</button><button class="btn btn-save" onclick="openConvoModal('${job.id}')">💬 Histórico</button><button class="btn btn-delete" onclick="deleteSavedTask('${job.id}')">🗑 Excluir</button>` : ''}
+    </div>` : '';
+
+  // ── CUSTOM FORMAT: smart rendering ──
+  if (!isStandardFormat) {
+    // Classify fields by semantic role
+    const TAG_KEYS = new Set(['tag', 'tags', 'type', 'tipo', 'category', 'categoria']);
+    const AREA_KEYS = new Set(['area', 'module', 'modulo', 'component', 'componente', 'scope', 'escopo', 'section', 'seção']);
+    const STATUS_KEYS = new Set(['status', 'validation_status', 'estado', 'state', 'priority', 'prioridade', 'severity', 'severidade', 'urgency']);
+    const NUMBER_KEYS = new Set(['number', 'numero', 'id', 'ticket', 'issue', 'code', 'codigo']);
+    const TITLE_KEYS = new Set(['title', 'titulo', 'name', 'nome', 'summary', 'resumo']);
+    const SKIP_BODY_KEYS = new Set(); // keys rendered in header, skip in body
+    const HIGHLIGHT_KEYS = new Set(['root_cause', 'root_cause_hypothesis', 'causa_raiz', 'hypothesis', 'hipotese', 'solution', 'solucao', 'recommendation', 'recomendacao']);
+
+    // Find title
+    const titleKey = Object.keys(r).find(k => TITLE_KEYS.has(k.toLowerCase()));
+    const titleVal = titleKey ? r[titleKey] : Object.values(r).find(v => typeof v === 'string' && v.length > 5 && v.length < 150) || 'Task Refinada';
+    if (titleKey) SKIP_BODY_KEYS.add(titleKey);
+
+    // Collect header tags
+    const headerTags = [];
+    Object.entries(r).forEach(([key, val]) => {
+      const kl = key.toLowerCase();
+      if (val === null || val === undefined || val === '') return;
+      if (NUMBER_KEYS.has(kl) && val !== null) {
+        headerTags.push(`<span class="custom-tag custom-tag-number">#${esc(String(val))}</span>`);
+        SKIP_BODY_KEYS.add(key);
+      } else if (TAG_KEYS.has(kl)) {
+        const tags = Array.isArray(val) ? val : [val];
+        tags.forEach(t => headerTags.push(`<span class="custom-tag custom-tag-type">${esc(String(t))}</span>`));
+        SKIP_BODY_KEYS.add(key);
+      } else if (AREA_KEYS.has(kl)) {
+        const areas = Array.isArray(val) ? val : [val];
+        areas.forEach(a => headerTags.push(`<span class="custom-tag custom-tag-area">📁 ${esc(String(a))}</span>`));
+        SKIP_BODY_KEYS.add(key);
+      } else if (STATUS_KEYS.has(kl) && typeof val === 'string') {
+        const statusColors = { 'approved': 'custom-tag-number', 'done': 'custom-tag-number', 'aprovado': 'custom-tag-number',
+          'needs revision': 'custom-tag-status', 'pending': 'custom-tag-status', 'pendente': 'custom-tag-status', 'in progress': 'custom-tag-status',
+          'critical': 'custom-tag-severity', 'high': 'custom-tag-severity', 'alta': 'custom-tag-severity', 'critica': 'custom-tag-severity',
+          'medium': 'custom-tag-priority', 'media': 'custom-tag-priority', 'normal': 'custom-tag-priority',
+          'low': 'custom-tag-default', 'baixa': 'custom-tag-default' };
+        const cls = statusColors[val.toLowerCase()] || 'custom-tag-status';
+        headerTags.push(`<span class="custom-tag ${cls}">${esc(val)}</span>`);
+        SKIP_BODY_KEYS.add(key);
+      }
+    });
+
+    // Build body sections (skip header fields)
+    const bodySections = Object.entries(r).filter(([key]) => !SKIP_BODY_KEYS.has(key)).map(([key, val]) => {
+      if (val === null || val === undefined || val === '') return '';
+      const label = key.replace(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      const kl = key.toLowerCase();
+      const isHighlight = HIGHLIGHT_KEYS.has(kl);
+
+      if (typeof val === 'string') {
+        const cssClass = isHighlight ? 'custom-field-highlight' : 'custom-field-text';
+        return `<div class="section"><div class="section-label">${isHighlight ? '💡 ' : ''}${esc(label)}</div><div class="${cssClass}">${esc(val)}</div></div>`;
+      }
+      if (Array.isArray(val)) {
+        if (val.length === 0) return '';
+        if (typeof val[0] === 'string') {
+          return `<div class="section"><div class="section-label">${esc(label)} (${val.length})</div><div class="custom-list-numbered">${val.map(v => `<div class="list-item">${esc(v)}</div>`).join('')}</div></div>`;
+        }
+        if (typeof val[0] === 'object') {
+          return `<div class="section"><div class="section-label">${esc(label)} (${val.length})</div>
+            <div class="subtask-list">${val.map(item => {
+              const fields = Object.entries(item).filter(([,v]) => v !== null && v !== undefined);
+              const firstField = fields[0];
+              const restFields = fields.slice(1);
+              return `<div class="subtask-item">
+                ${firstField ? `<div class="subtask-title">${esc(String(firstField[1]))}</div>` : ''}
+                ${restFields.map(([k, v]) => `<div class="subtask-desc"><strong>${esc(k.replace(/[_-]/g, ' '))}:</strong> ${esc(String(v))}</div>`).join('')}
+              </div>`;
+            }).join('')}</div></div>`;
+        }
+      }
+      if (typeof val === 'number') {
+        return `<div class="section"><div class="section-label">${esc(label)}</div><div class="custom-field-text">${esc(String(val))}</div></div>`;
+      }
+      if (typeof val === 'boolean') {
+        return `<div class="section"><div class="section-label">${esc(label)}</div><div class="custom-field-text">${val ? '✅ Sim' : '❌ Não'}</div></div>`;
+      }
+      if (typeof val === 'object') {
+        return `<div class="section"><div class="section-label">${esc(label)}</div><div class="custom-field-text" style="font-size:11px">${esc(JSON.stringify(val, null, 2))}</div></div>`;
+      }
+      return '';
+    }).join('');
+
+    return `${banners}${timelineHtml}
+      <div class="task-header">
+        <div class="task-title">${esc(String(titleVal))}</div>
+        <div class="task-meta-row">
+          ${headerTags.join('')}
+          ${job.version > 1 ? `<span class="tag tag-version">v${job.version}</span>` : ''}
+          ${isPipeline ? `<span class="tag tag-pipeline">🔗 Pipeline</span>` : ''}
+          ${valStatus === 'approved' ? `<span class="tag tag-val-approved">✅ Approved</span>` : ''}
+          ${valStatus === 'patched' ? `<span class="tag tag-val-patched">🔧 Patched</span>` : ''}
+          <button class="btn btn-copy" style="margin-left:auto;padding:5px 12px;font-size:10px" onclick="copyTaskResult('${job.id}', '${source}', this)">📋 Copiar</button>
+        </div>
+      </div>
+
+      <div class="section"><div class="section-label">Task Original</div><div class="raw-task-box">${esc(job.rawTask)}</div></div>
+
+      ${bodySections}
+
+      ${actionsHtml}`;
+  }
+
+  // ── STANDARD FORMAT: existing render ──
+  return `${banners}${timelineHtml}
+      <div class="task-header">
+      <div class="task-title">${esc(r.title)}</div>
+        <div class="task-meta-row">
+          <span class="tag tag-effort-${r.effort}">${r.effort} · ${r.effort_points}pts</span>
+        ${r.epic ? `<span class="tag tag-epic">${esc(r.epic)}</span>` : ''}
+        <span class="tag tag-role">${esc(r.suggested_assignee_role)}</span>
+        ${(r.labels || []).map(l => `<span class="tag tag-label">${esc(l)}</span>`).join('')}
+        ${job.version > 1 ? `<span class="tag tag-version">v${job.version}</span>` : ''}
+        ${isPipeline ? `<span class="tag tag-pipeline">🔗 Pipeline</span>` : ''}
+        ${valStatus === 'approved' ? `<span class="tag tag-val-approved">✅ Approved</span>` : ''}
+        ${valStatus === 'patched' ? `<span class="tag tag-val-patched">🔧 Patched</span>` : ''}
+        <button class="btn btn-copy" style="margin-left:auto;padding:5px 12px;font-size:10px" onclick="copyTaskResult('${job.id}', '${source}', this)">📋 Copiar</button>
+        </div>
+      </div>
+
+    <div class="section"><div class="section-label">Task Original</div><div class="raw-task-box">${esc(job.rawTask)}</div></div>
+
+    <div class="section"><div class="section-label">Descrição</div><div class="desc-box">${esc(r.description)}</div></div>
+
+    <div class="section"><div class="section-label">Subtasks (${(r.subtasks||[]).length})</div>
+      <div class="subtask-list">${(r.subtasks||[]).map(s => `<div class="subtask-item"><div class="subtask-title">${esc(s.title)}</div><div class="subtask-desc">${esc(s.description)}</div></div>`).join('')}</div>
+      </div>
+
+    <div class="section"><div class="section-label">Critérios de Aceite</div>
+      <div class="criteria-list">${(r.acceptance_criteria||[]).map(ac => `<div class="criteria-item"><span class="criteria-kw">Given</span> ${esc(ac.given)}<br><span class="criteria-kw">When</span> ${esc(ac.when)}<br><span class="criteria-kw">Then</span> ${esc(ac.then)}</div>`).join('')}</div>
+        </div>
+
+    ${(r.risks||[]).length ? `<div class="section"><div class="section-label">Riscos</div><div class="list-items">${r.risks.map(ri => `<div class="list-item">${esc(ri)}</div>`).join('')}</div></div>` : ''}
+    ${(r.dependencies||[]).length ? `<div class="section"><div class="section-label">Dependências</div><div class="list-items">${r.dependencies.map(d => `<div class="list-item">${esc(d)}</div>`).join('')}</div></div>` : ''}
+
+    ${actionsHtml}`;
+}
+
+// ═══════════════════════════════════════════
+// QUEUE ACTIONS
+// ═══════════════════════════════════════════
+  async function approveJob(id) {
+    const res = await fetch(`${API}/api/tasks/${id}/approve`, { method: 'POST' });
+    const data = await res.json();
+  if (!res.ok) { toast('Erro: ' + data.error, true); return; }
+    const j = jobs.find(j => j.id === id);
+  if (data.notionUrl && j) j.notionUrl = data.notionUrl;
+  toast('✓ Task salva!');
+  }
+
+  async function rejectJob(id) {
+  const reason = prompt('Motivo (opcional):') || '';
+  await fetch(`${API}/api/tasks/${id}/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) });
+    toast('Task rejeitada');
+  }
+
+async function retryQueueJob(id) {
+  try {
+    const res = await fetch(`${API}/api/tasks/${id}/retry`, { method: 'POST' });
+    if (!res.ok) { const d = await res.json(); toast('Erro: ' + d.error, true); return; }
+    toast('🔄 Task reenviada para processamento!');
+    selectedId = null;
+  } catch { toast('Erro ao regenerar', true); }
+}
+
+async function removeQueueJob(id) {
+  try {
+    const res = await fetch(`${API}/api/tasks/${id}`, { method: 'DELETE' });
+    if (!res.ok) { const d = await res.json(); toast('Erro: ' + d.error, true); return; }
+    jobs = jobs.filter(j => j.id !== id);
+    if (selectedId === id) { selectedId = null; document.getElementById('detailPanel').innerHTML = '<div class="empty"><div class="empty-icon">⬡</div><h3>Nenhuma task selecionada</h3></div>'; }
+    renderList(); toast('Task removida da fila');
+  } catch { toast('Erro ao remover', true); }
+}
+
+// ═══════════════════════════════════════════
+// SAVED TASKS
+// ═══════════════════════════════════════════
+async function loadSavedTasks() {
+  try {
+    const status = document.getElementById('statusFilter').value;
+    const search = document.getElementById('searchInput').value.trim();
+    const params = new URLSearchParams({ page: savedPage, limit: 50 });
+    if (status) params.set('status', status);
+    if (search) params.set('search', search);
+    const res = await fetch(`${API}/api/db/tasks?${params}`);
+    const data = await res.json();
+    savedTasks = data.tasks || []; savedTotal = data.total || 0; savedTotalPages = data.totalPages || 1;
+    document.getElementById('savedCount').textContent = savedTotal;
+    renderSavedList(); renderPagination();
+  } catch { toast('Erro ao carregar', true); }
+}
+
+function renderSavedList() {
+  const el = document.getElementById('savedList');
+  el.innerHTML = '';
+  if (!savedTasks.length) { el.innerHTML = '<div class="empty" style="padding:40px 0"><div class="empty-icon">📭</div><h3>Nenhuma task</h3></div>'; return; }
+  savedTasks.forEach(task => {
+    const div = document.createElement('div');
+    div.className = `saved-item ${task.id === savedSelectedId ? 'active' : ''}`;
+    div.onclick = () => { savedSelectedId = task.id; renderSavedList(); renderSavedDetail(task); };
+    div.innerHTML = `
+      <div class="saved-title">${esc(task.title || task.rawTask)}</div>
+      <div class="saved-raw">${esc(task.rawTask)}</div>
+      <div class="saved-meta">
+        <span class="status-badge status-${task.status}">${task.status}</span>
+        ${task.pipelineMode === 'pipeline' ? `<span class="tag tag-pipeline">🔗</span>` : ''}
+        ${task.validationStatus === 'approved' ? `<span class="tag tag-val-approved">✅</span>` : ''}
+        ${task.validationStatus === 'patched' ? `<span class="tag tag-val-patched">🔧</span>` : ''}
+        ${task.effort ? `<span class="tag tag-effort-${task.effort}">${task.effort}</span>` : ''}
+        ${task.agentIcon ? `<span class="tag tag-agent">${task.agentIcon}</span>` : ''}
+        ${task.version > 1 ? `<span class="tag tag-version">v${task.version}</span>` : ''}
+        <span class="saved-date">${formatDate(task.createdAt)}</span>
+      </div>`;
+    el.appendChild(div);
+  });
+}
+
+function renderSavedDetail(task) {
+  const panel = document.getElementById('savedDetailPanel');
+  if (task.status === 'error') {
+    panel.innerHTML = `
+      <div class="empty" style="gap:16px">
+        <div class="empty-icon">✕</div>
+        <h3>Erro ao refinar</h3>
+        <p style="max-width:500px;line-height:1.6">${esc(task.error || 'Erro desconhecido')}</p>
+        <div class="section" style="width:100%;max-width:500px"><div class="section-label">Task Original</div><div class="raw-task-box">${esc(task.rawTask)}</div></div>
+        <div style="display:flex;gap:10px;margin-top:8px">
+          <button class="btn btn-refine" onclick="retrySavedTask('${task.id}')">🔄 Regenerar</button>
+          <button class="btn btn-delete" onclick="deleteSavedTask('${task.id}')">🗑 Apagar</button>
+        </div>
+      </div>`;
+      return;
+    }
+  if (!task.result) { panel.innerHTML = '<div class="empty"><div class="empty-icon">⬡</div><h3>Sem resultado</h3></div>'; return; }
+  panel.innerHTML = renderTaskResult({ ...task, notionUrl: null }, { showActions: true, source: 'saved' });
+}
+
+function renderPagination() {
+  const el = document.getElementById('pagination');
+  if (savedTotalPages <= 1) { el.innerHTML = ''; return; }
+  el.innerHTML = `<button class="page-btn" ${savedPage<=1?'disabled':''} onclick="goToPage(${savedPage-1})">←</button><span>${savedPage}/${savedTotalPages}</span><button class="page-btn" ${savedPage>=savedTotalPages?'disabled':''} onclick="goToPage(${savedPage+1})">→</button>`;
+}
+function goToPage(p) { savedPage = p; loadSavedTasks(); }
+
+// ═══════════════════════════════════════════
+// RE-REFINE
+// ═══════════════════════════════════════════
+function openReRefineModal(taskId) {
+  reRefineTaskId = taskId;
+  const task = savedTasks.find(t => t.id === taskId);
+  document.getElementById('reRefineTaskTitle').textContent = task ? `Re-refinar: "${task.title || task.rawTask}"` : '';
+  document.getElementById('improvementNotes').value = '';
+  // Select current agent
+  const sel = document.getElementById('reRefineAgentSelect');
+  if (task && task.agentId && sel) sel.value = task.agentId;
+  document.getElementById('reRefineModal').style.display = 'flex';
+}
+function closeReRefineModal() { document.getElementById('reRefineModal').style.display = 'none'; reRefineTaskId = null; }
+
+async function submitReRefine() {
+  const notes = document.getElementById('improvementNotes').value.trim();
+  if (!notes) { toast('Informe os pontos de melhoria', true); return; }
+  const agentId = document.getElementById('reRefineAgentSelect').value || null;
+  const pm = reRefineMode;
+  const valId = pm === 'pipeline' ? (document.getElementById('reRefineValidatorSelect').value || null) : null;
+  try {
+    const res = await fetch(`${API}/api/db/tasks/${reRefineTaskId}/re-refine`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ improvementNotes: notes, agentId, pipelineMode: pm, validatorAgentId: valId })
+    });
+    if (!res.ok) { const d = await res.json(); toast('Erro: ' + d.error, true); return; }
+    closeReRefineModal(); toast('🔄 Enviado para re-refinamento!'); switchView('refine');
+  } catch { toast('Erro', true); }
+}
+
+async function retrySavedTask(taskId) {
+  try {
+    const res = await fetch(`${API}/api/db/tasks/${taskId}/retry`, { method: 'POST' });
+    if (!res.ok) { const d = await res.json(); toast('Erro: ' + d.error, true); return; }
+    toast('🔄 Task reenviada para processamento!');
+    savedSelectedId = null;
+    document.getElementById('savedDetailPanel').innerHTML = '<div class="empty"><div class="empty-icon">📦</div><h3>Selecione uma task</h3></div>';
+    loadSavedTasks();
+    switchView('refine');
+  } catch { toast('Erro ao regenerar', true); }
+}
+
+async function deleteSavedTask(taskId) {
+  if (!confirm('Excluir esta task?')) return;
+  try {
+    await fetch(`${API}/api/db/tasks/${taskId}`, { method: 'DELETE' });
+    toast('Task excluída'); savedSelectedId = null;
+    document.getElementById('savedDetailPanel').innerHTML = '<div class="empty"><div class="empty-icon">📦</div><h3>Selecione uma task</h3></div>';
+    loadSavedTasks();
+  } catch { toast('Erro', true); }
+}
+
+// ═══════════════════════════════════════════
+// CONVERSATION HISTORY
+// ═══════════════════════════════════════════
+async function openConvoModal(taskId) {
+  document.getElementById('convoModal').style.display = 'flex';
+  const content = document.getElementById('convoContent');
+  content.innerHTML = '<div class="processing-state" style="height:100px"><div class="spinner"></div><p>Carregando...</p></div>';
+  try {
+    const res = await fetch(`${API}/api/db/tasks/${taskId}/conversation`);
+    const msgs = await res.json();
+    if (!msgs.length) { content.innerHTML = '<div class="empty" style="height:auto;padding:20px"><p>Nenhum histórico de conversa</p></div>'; return; }
+    content.innerHTML = msgs.map(m => `
+      <div class="convo-msg ${m.role}">
+        <div class="convo-role">${m.role === 'user' ? '👤 Usuário' : '🤖 Assistant'} <span class="convo-version">v${m.version || 1} · ${formatDate(m.createdAt)}</span></div>
+        ${esc(m.content)}
+      </div>`).join('');
+  } catch { content.innerHTML = '<div class="empty" style="height:auto"><p>Erro ao carregar</p></div>'; }
+}
+function closeConvoModal() { document.getElementById('convoModal').style.display = 'none'; }
+
+// ═══════════════════════════════════════════
+// COPY TASK
+// ═══════════════════════════════════════════
+function copyTaskResult(jobId, source, btnEl) {
+  let job;
+  if (source === 'saved') {
+    job = savedTasks.find(t => t.id === jobId);
+    } else {
+    job = jobs.find(j => j.id === jobId);
+  }
+  if (!job || !job.result) { toast('Nada para copiar', true); return; }
+
+  const r = job.result;
+  const isStd = r.title && r.description && (r.subtasks || r.acceptance_criteria || r.effort);
+  let text = '';
+
+  if (isStd) {
+    // Standard format copy
+  text += `📌 ${r.title}\n\n`;
+  text += `📝 Descrição:\n${r.description}\n\n`;
+  if (r.epic) text += `🏷️ Épico: ${r.epic}\n`;
+  text += `⚡ Esforço: ${r.effort} (${r.effort_points} pts)\n`;
+  text += `👤 Responsável sugerido: ${r.suggested_assignee_role}\n`;
+  if ((r.labels || []).length) text += `🔖 Labels: ${r.labels.join(', ')}\n`;
+  text += '\n';
+  if ((r.subtasks || []).length) {
+    text += `📋 Subtasks:\n`;
+    r.subtasks.forEach((s, i) => { text += `  ${i + 1}. ${s.title}\n     ${s.description}\n`; });
+    text += '\n';
+  }
+  if ((r.acceptance_criteria || []).length) {
+    text += `✅ Critérios de Aceite:\n`;
+    r.acceptance_criteria.forEach((ac, i) => {
+      text += `  ${i + 1}. Given ${ac.given}\n     When ${ac.when}\n     Then ${ac.then}\n`;
+    });
+    text += '\n';
+  }
+  if ((r.dependencies || []).length) {
+    text += `🔗 Dependências:\n`;
+    r.dependencies.forEach(d => { text += `  → ${d}\n`; });
+    text += '\n';
+  }
+  if ((r.risks || []).length) {
+    text += `⚠️ Riscos:\n`;
+    r.risks.forEach(ri => { text += `  → ${ri}\n`; });
+    text += '\n';
+    }
+  } else {
+    // Custom format copy — iterate all fields intelligently
+    Object.entries(r).forEach(([key, val]) => {
+      if (val === null || val === undefined || val === '') return;
+      const label = key.replace(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      if (typeof val === 'string') {
+        text += `${label}: ${val}\n\n`;
+      } else if (Array.isArray(val)) {
+        if (val.length === 0) return;
+        text += `${label}:\n`;
+        val.forEach((item, i) => {
+          if (typeof item === 'string') {
+            text += `  ${i + 1}. ${item}\n`;
+          } else if (typeof item === 'object') {
+            const parts = Object.entries(item).filter(([,v]) => v !== null).map(([k, v]) => `${k}: ${v}`).join(' | ');
+            text += `  ${i + 1}. ${parts}\n`;
+          }
+        });
+        text += '\n';
+      } else if (typeof val === 'number' || typeof val === 'boolean') {
+        text += `${label}: ${val}\n`;
+      } else if (typeof val === 'object') {
+        text += `${label}:\n${JSON.stringify(val, null, 2)}\n\n`;
+      }
+    });
+  }
+
+  text += `───────────────────\n`;
+  text += `Task original: "${job.rawTask}"`;
+
+  navigator.clipboard.writeText(text).then(() => {
+    toast('📋 Task copiada!');
+    if (btnEl) {
+      const orig = btnEl.innerHTML;
+      btnEl.innerHTML = '✓ Copiado!';
+      btnEl.classList.add('copied');
+      setTimeout(() => { btnEl.innerHTML = orig; btnEl.classList.remove('copied'); }, 2000);
+    }
+  }).catch(() => {
+    // Fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast('📋 Task copiada!'); } catch { toast('Erro ao copiar', true); }
+    document.body.removeChild(ta);
+  });
+}
+
+function copyTaskJSON(jobId, source) {
+  let job;
+  if (source === 'saved') {
+    job = savedTasks.find(t => t.id === jobId);
+  } else {
+    job = jobs.find(j => j.id === jobId);
+  }
+  if (!job || !job.result) { toast('Nada para copiar', true); return; }
+
+  const payload = { ...job.result, _rawTask: job.rawTask };
+  navigator.clipboard.writeText(JSON.stringify(payload, null, 2)).then(() => {
+    toast('📋 JSON copiado!');
+  }).catch(() => toast('Erro ao copiar', true));
+}
+
+// ═══════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════
+  function updateStats() {
+    const counts = { waiting:0, processing:0, review:0, published:0 };
+    jobs.forEach(j => { if (counts[j.status] !== undefined) counts[j.status]++; });
+  Object.entries(counts).forEach(([k,v]) => { const el = document.getElementById(`s-${k}`); if (el) el.textContent = v; });
+}
+function timeAgo(iso) { const m = Math.floor((Date.now() - new Date(iso)) / 60000); if (m < 1) return 'agora'; if (m < 60) return m+'min'; return Math.floor(m/60)+'h'; }
+function formatDate(d) { if (!d) return ''; const dt = new Date(d); return dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'})+' '+dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }
+function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function toast(msg, isErr=false) { const el = document.getElementById('toast'); el.textContent = msg; el.style.borderColor = isErr ? 'var(--red)' : 'var(--green)'; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 3000); }
+
+// ═══════════════════════════════════════════
+// TASK IMAGE MANAGEMENT
+// ═══════════════════════════════════════════
+function renderTaskImagePreviews() {
+  const area = document.getElementById('taskImagesPreview');
+  area.innerHTML = '';
+  taskImageFiles.forEach((file, idx) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'img-thumb';
+    thumb.title = file.name;
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(file);
+    const removeBtn = document.createElement('div');
+    removeBtn.className = 'img-remove';
+    removeBtn.textContent = '✕';
+    removeBtn.onclick = (e) => { e.stopPropagation(); removeTaskImage(idx); };
+    thumb.appendChild(img);
+    thumb.appendChild(removeBtn);
+    area.appendChild(thumb);
+  });
+}
+
+function removeTaskImage(idx) {
+  taskImageFiles.splice(idx, 1);
+  renderTaskImagePreviews();
+}
+
+function clearTaskImages() {
+  taskImageFiles = [];
+  renderTaskImagePreviews();
+  document.getElementById('taskImageInput').value = '';
+}
+
+document.getElementById('taskImageInput').addEventListener('change', (e) => {
+  const files = Array.from(e.target.files || []);
+  if (files.length === 0) return;
+  taskImageFiles.push(...files);
+  renderTaskImagePreviews();
+  e.target.value = '';
+});
+
+document.getElementById('taskInput').addEventListener('keydown', e => { if (e.ctrlKey && e.key === 'Enter') submitTasks(); });
+document.getElementById('searchInput').addEventListener('input', () => { clearTimeout(searchDebounce); searchDebounce = setTimeout(() => { savedPage = 1; loadSavedTasks(); }, 400); });
+document.getElementById('reRefineModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeReRefineModal(); });
+document.getElementById('convoModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeConvoModal(); });
+
+// Init
+loadAgents();
+initModeSelector();
+  connectSSE();
+</script>
+</body>
+</html>
