@@ -34,11 +34,19 @@ pm2 restart task-refiner --update-env
 log "Processo pm2 'task-refiner' reiniciado"
 
 sleep 3
-CODE="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3099/)"
-if [ "$CODE" -ge 200 ] && [ "$CODE" -lt 500 ]; then
+HEALTH_OK=0
+for i in $(seq 1 10); do
+  CODE="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3099/)"
+  if [ "$CODE" -ge 200 ] && [ "$CODE" -lt 500 ]; then
+    HEALTH_OK=1
+    break
+  fi
+  sleep 2
+done
+if [ "$HEALTH_OK" = "1" ]; then
   log "Health-check OK (HTTP $CODE)"
 else
-  log "ERRO: health-check falhou (HTTP $CODE)"
+  log "ERRO: health-check falhou (tentativas esgotadas) (HTTP $CODE)"
   exit 1
 fi
 
